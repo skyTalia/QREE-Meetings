@@ -190,9 +190,43 @@ function matchSearch(m, text) {
   );
 }
 
-/* ---------- Save & Load ---------- */
-function saveMeetings() {
-  localStorage.setItem("meetings", JSON.stringify(meetings));
+/* ---------- Firestore Sync (v11 compatible) ---------- */
+
+// Save to Firestore
+async function saveMeetings() {
+  try {
+    const { collection, getDocs, addDoc, deleteDoc } = window.firestoreFns;
+    const colRef = collection(db, "meetings");
+
+    // Clear current docs to prevent duplicates
+    const snap = await getDocs(colRef);
+    for (const docSnap of snap.docs) {
+      await deleteDoc(docSnap.ref);
+    }
+
+    // Re-upload all meetings
+    for (const m of meetings) {
+      await addDoc(colRef, m);
+    }
+
+    console.log("✅ Meetings saved to Firestore");
+  } catch (err) {
+    console.error("❌ Error saving to Firestore:", err);
+  }
 }
 
-renderMeetings();
+// Load from Firestore
+function loadMeetings() {
+  const { collection, onSnapshot } = window.firestoreFns;
+  const colRef = collection(db, "meetings");
+
+  onSnapshot(colRef, (snapshot) => {
+    meetings = snapshot.docs.map(doc => doc.data());
+    renderMeetings();
+  });
+}
+
+// Load from Firestore when page opens
+loadMeetings();
+
+
