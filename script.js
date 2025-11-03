@@ -63,7 +63,7 @@ function renderMeetings(filterText = "") {
   completedContainer.innerHTML = "";
 
   const now = new Date();
-  const todayDate = now.toISOString().split("T")[0];
+  const todayDate = now.toLocaleDateString("en-CA");
 
   meetings
     .sort((a, b) => new Date(a.datetime) - new Date(b.datetime))
@@ -73,9 +73,16 @@ function renderMeetings(filterText = "") {
       const meetingTime = new Date(meeting.datetime);
       const meetingDate = meeting.datetime.split("T")[0];
 
-      let status = meeting.cancelled ? "❌ Cancelled" :
-        meeting.done ? "✅ Done" :
-        meetingTime > now ? "🕐 Upcoming" : "🟢 Ongoing";
+      // ✅ Improved status logic with 1-minute grace
+      const diff = meetingTime.getTime() - now.getTime();
+      let status;
+      if (meeting.cancelled) status = "❌ Cancelled";
+      else if (meeting.done) status = "✅ Done";
+      else if (diff > 60000) status = "🕐 Upcoming";
+      else if (meetingDate === todayDate && diff <= 60000 && diff >= -3600000)
+        status = "🟢 Ongoing";
+      else if (meetingTime < now) status = "🕓 Past";
+      else status = "🕐 Upcoming";
 
       const formattedDate = meetingTime.toLocaleString([], {
         weekday: "short", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit"
@@ -89,23 +96,32 @@ function renderMeetings(filterText = "") {
       if (meeting.done) card.classList.add("done");
 
       card.innerHTML = `
-        <button class="card-delete-btn" onclick="event.stopPropagation(); deleteMeeting('${meeting.id}')">×</button>
+        <button class="card-delete-btn" onclick="event.stopPropagation(); deleteMeeting(${meeting.id})">×</button>
         <h3>${formattedDate}</h3>
         <p><b>Attendees:</b><br>${attendeeList || "None"}</p>
         <p><b>Link:</b> <a href="${meeting.meetingLink}" target="_blank">${meeting.meetingLink}</a></p>
         <p class="status"><b>Status:</b> ${status}</p>
         <div class="event-actions">
-            <button class="btn-edit" onclick="event.stopPropagation(); editMeeting('${meeting.id}')">Edit</button>
-            <button class="btn-done" onclick="event.stopPropagation(); markDone('${meeting.id}')">Done</button>
-            <button class="btn-cancel" onclick="event.stopPropagation(); cancelMeeting('${meeting.id}')">Cancel</button>
+          <button class="btn-edit" onclick="event.stopPropagation(); editMeeting(${meeting.id})">Edit</button>
+          <button class="btn-done" onclick="event.stopPropagation(); markDone(${meeting.id})">Done</button>
+          <button class="btn-cancel" onclick="event.stopPropagation(); cancelMeeting(${meeting.id})">Cancel</button>
         </div>
       `;
 
       card.addEventListener("click", () => openNotes(meeting.id));
 
-      if (meeting.done) completedContainer.appendChild(card);
-      else if (meetingDate === todayDate) todayContainer.appendChild(card);
-      else if (meetingTime > now) upcomingContainer.appendChild(card);
+      // ✅ Smarter placement logic
+      if (meeting.done) {
+        completedContainer.appendChild(card);
+      } else if (meeting.cancelled) {
+        todayContainer.appendChild(card);
+      } else if (diff > 60000) {
+        upcomingContainer.appendChild(card);
+      } else if (meetingDate === todayDate && diff <= 60000 && diff >= -3600000) {
+        todayContainer.appendChild(card); // ongoing today (1-hour range)
+      } else if (meetingTime < now && meetingDate < todayDate) {
+        todayContainer.appendChild(card); // older past meetings (optional)
+      }
     });
 }
 
@@ -203,13 +219,12 @@ function matchSearch(m, text) {
   );
 }
 
-/* ---------- Firestore Sync (persistent + no wiping) ---------- */
+/* ---------- Firestore Sync ---------- */
 async function saveMeetings() {
   try {
     const { collection, setDoc, doc } = window.firestoreFns;
 
     for (const m of meetings) {
-      // Generate or reuse a readable document ID
       if (!m.docId) {
         if (m.attendees && m.attendees.length > 0) {
           const firstAttendee = m.attendees[0];
@@ -219,18 +234,14 @@ async function saveMeetings() {
           m.docId = "Meeting_" + (m.id || Date.now());
         }
       }
-
-      // Write or overwrite this document only
       await setDoc(doc(db, "meetings", m.docId), m);
     }
-
     console.log("✅ Meetings saved to Firestore without wiping existing ones");
   } catch (err) {
     console.error("❌ Error saving to Firestore:", err);
   }
 }
 
-/* ---------- Update a Single Meeting ---------- */
 async function updateMeetingInFirestore(meeting) {
   try {
     const { doc, setDoc } = window.firestoreFns;
@@ -250,7 +261,6 @@ async function updateMeetingInFirestore(meeting) {
   }
 }
 
-
 /* ---------- Live Load from Firestore ---------- */
 function loadMeetings() {
   const { collection, onSnapshot } = window.firestoreFns;
@@ -267,3 +277,8 @@ function loadMeetings() {
 
 /* ---------- Initialize ---------- */
 loadMeetings();
+
+/* ---------- Auto Refresh Every Minute ---------- */
+setInterval(() => {
+  renderMeetings(searchInput.value.trim().toLowerCase());
+}, 60000);
