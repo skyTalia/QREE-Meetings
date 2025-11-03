@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>QURI Onboarding Meetings</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header>QURI Onboarding Meetings</header>
+
+  <input type="text" id="searchInput" placeholder="🔍 Search by attendee or note..." />
+
+  <main>
+    <div class="top-bar">
+      <h2>Meetings for Today</h2>
+      <button id="openModalBtn">➕ Add Meeting</button>
+    </div>
+
+    <div id="todayMeetings"></div>
+
+    <hr>
+
+    <section id="upcomingSection">
+      <h2>Upcoming Meetings</h2>
+      <div id="upcomingMeetings"></div>
+    </section>
+
+    <hr>
+
+    <section id="completedSection">
+      <h2>Completed Meetings</h2>
+      <div id="completedMeetings"></div>
+    </section>
+  </main>
+
+  <!-- Add/Edit Meeting Modal -->
+  <div id="meetingModal" class="modal">
+    <div class="modal-content">
+      <span class="close" id="closeModal">&times;</span>
+      <h3 id="modalTitle">Add New Meeting</h3>
+      <form id="meetingForm">
+        <label>Date & Time</label>
+        <input type="datetime-local" id="datetime" required>
+
+        <label>Meeting Link</label>
+        <input type="url" id="meetingLink" placeholder="https://meet.google.com/..." required>
+
+        <label>Attendees (one per line)</label>
+        <textarea id="attendees" rows="4" placeholder="Michelle (michelle@company.com)"></textarea>
+
+        <button type="submit" id="saveMeetingBtn">Save Meeting</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Notes Modal -->
+  <div id="notesModal" class="modal">
+    <div class="modal-content">
+      <span class="close" id="closeNotesModal">&times;</span>
+      <h3 id="notesMeetingTitle">Meeting Notes</h3>
+      <p id="notesMeetingInfo"></p>
+      <textarea id="notesTextarea" rows="8" placeholder="Type your notes or client concerns here..."></textarea>
+    </div>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
