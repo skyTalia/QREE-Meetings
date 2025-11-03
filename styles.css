@@ -227,6 +227,7 @@ hr {
   cursor: pointer;
 }
 
+
 .event-card a {
   color: #FFFFFF;            /* white text for dark backgrounds */
   text-decoration: none;     /* removes underline */
@@ -237,6 +238,8 @@ hr {
 .event-card a:hover {
   text-decoration: underline;  /* underline on hover for clarity */
   color: #FFF8D4;              /* soft cream hover color */
+  transform: translateY(-2px);
+  box-shadow: 0 6px 14px rgba(163, 176, 135, 0.6);
 }
 
 .event-card.cancelled {
@@ -246,8 +249,48 @@ hr {
 }
 
 .event-card.done {
-  background: #A3B087;
+  background: linear-gradient(135deg, #a8b48a, #c2cfac);
+  color: #2e2e2e;
+  border: 2px solid #9da989;
+  position: relative;
+  box-shadow: 0 4px 10px rgba(163, 176, 135, 0.4);
+  transition: all 0.3s ease-in-out;
+}
+
+.event-card.done:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 14px rgba(163, 176, 135, 0.6);
+}
+
+/* Optional subtle checkmark badge */
+.event-card.done::before {
+  position: absolute;
+  top: 10px;
+  left: 12px;
+  font-size: 1.3rem;
+  color: #435663;
+  opacity: 0.8;
+}
+
+/* Adjust the buttons for better contrast */
+.event-card.done .event-actions button {
+  box-shadow: none;
+  opacity: 0.85;
+}
+
+.event-card.done .btn-edit {
+  background: #f6f6f2;
   color: #313647;
+}
+
+.event-card.done .btn-done {
+  background: #879872;
+  color: #fff;
+}
+
+.event-card.done .btn-cancel {
+  background: #b5b5b5;
+  color: #fff;
 }
 
 .event-actions {
