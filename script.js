@@ -1,3 +1,4 @@
+/* ---------- Element References ---------- */
 const openModalBtn = document.getElementById("openModalBtn");
 const closeModalBtn = document.getElementById("closeModal");
 const modal = document.getElementById("meetingModal");
@@ -7,7 +8,7 @@ const upcomingContainer = document.getElementById("upcomingMeetings");
 const completedContainer = document.getElementById("completedMeetings");
 const searchInput = document.getElementById("searchInput");
 
-let meetings = JSON.parse(localStorage.getItem("meetings")) || [];
+let meetings = [];
 let editMode = false;
 let editId = null;
 
@@ -23,7 +24,7 @@ closeModalBtn.addEventListener("click", () => (modal.style.display = "none"));
 window.addEventListener("click", e => { if (e.target === modal) modal.style.display = "none"; });
 
 /* ---------- Add/Edit Meeting ---------- */
-meetingForm.addEventListener("submit", e => {
+meetingForm.addEventListener("submit", async e => {
   e.preventDefault();
 
   const datetime = document.getElementById("datetime").value;
@@ -49,7 +50,7 @@ meetingForm.addEventListener("submit", e => {
     });
   }
 
-  saveMeetings();
+  await saveMeetings();
   renderMeetings();
   meetingForm.reset();
   modal.style.display = "none";
@@ -88,17 +89,16 @@ function renderMeetings(filterText = "") {
       if (meeting.done) card.classList.add("done");
 
       card.innerHTML = `
-        <button class="card-delete-btn" onclick="event.stopPropagation(); deleteMeeting(${meeting.id})">×</button>
+        <button class="card-delete-btn" onclick="event.stopPropagation(); deleteMeeting('${meeting.id}')">×</button>
         <h3>${formattedDate}</h3>
         <p><b>Attendees:</b><br>${attendeeList || "None"}</p>
         <p><b>Link:</b> <a href="${meeting.meetingLink}" target="_blank">${meeting.meetingLink}</a></p>
         <p class="status"><b>Status:</b> ${status}</p>
         <div class="event-actions">
-            <button class="btn-edit" onclick="event.stopPropagation(); editMeeting(${meeting.id})">Edit</button>
-            <button class="btn-done" onclick="event.stopPropagation(); markDone(${meeting.id})">Done</button>
-            <button class="btn-cancel" onclick="event.stopPropagation(); cancelMeeting(${meeting.id})">Cancel</button>
+            <button class="btn-edit" onclick="event.stopPropagation(); editMeeting('${meeting.id}')">Edit</button>
+            <button class="btn-done" onclick="event.stopPropagation(); markDone('${meeting.id}')">Done</button>
+            <button class="btn-cancel" onclick="event.stopPropagation(); cancelMeeting('${meeting.id}')">Cancel</button>
         </div>
-    
       `;
 
       card.addEventListener("click", () => openNotes(meeting.id));
@@ -110,11 +110,11 @@ function renderMeetings(filterText = "") {
 }
 
 /* ---------- Actions ---------- */
-function editMeeting(id) {
-  const m = meetings.find(meeting => meeting.id === id);
+async function editMeeting(id) {
+  const m = meetings.find(meeting => meeting.id == id);
   if (!m) return;
   editMode = true;
-  editId = id;
+  editId = m.id;
   document.getElementById("modalTitle").textContent = "Edit Meeting";
   document.getElementById("datetime").value = m.datetime;
   document.getElementById("meetingLink").value = m.meetingLink;
@@ -122,23 +122,35 @@ function editMeeting(id) {
   modal.style.display = "flex";
 }
 
-function markDone(id) {
-  meetings = meetings.map(m => m.id === id ? { ...m, done: true, cancelled: false } : m);
-  saveMeetings();
-  renderMeetings();
+async function markDone(id) {
+  const m = meetings.find(meeting => meeting.id == id);
+  if (!m) return;
+  m.done = true;
+  m.cancelled = false;
+  await updateMeetingInFirestore(m);
 }
 
-function cancelMeeting(id) {
-  meetings = meetings.map(m => m.id === id ? { ...m, cancelled: true, done: false } : m);
-  saveMeetings();
-  renderMeetings();
+async function cancelMeeting(id) {
+  const m = meetings.find(meeting => meeting.id == id);
+  if (!m) return;
+  m.cancelled = true;
+  m.done = false;
+  await updateMeetingInFirestore(m);
 }
 
-function deleteMeeting(id) {
-  if (confirm("Delete this cancelled meeting permanently?")) {
-    meetings = meetings.filter(m => m.id !== id);
-    saveMeetings();
+async function deleteMeeting(id) {
+  try {
+    const meeting = meetings.find(m => m.id == id);
+    if (!meeting) return;
+
+    const { doc, deleteDoc } = window.firestoreFns;
+    await deleteDoc(doc(db, "meetings", meeting.docId));
+
+    meetings = meetings.filter(m => m.id != id);
     renderMeetings();
+    console.log(`🗑️ Deleted meeting: ${meeting.docId}`);
+  } catch (err) {
+    console.error("❌ Error deleting meeting:", err);
   }
 }
 
@@ -150,7 +162,7 @@ const notesTextarea = document.getElementById("notesTextarea");
 let activeMeetingId = null;
 
 function openNotes(meetingId) {
-  const m = meetings.find(meeting => meeting.id === meetingId);
+  const m = meetings.find(meeting => meeting.id == meetingId);
   if (!m) return;
 
   activeMeetingId = meetingId;
@@ -169,12 +181,13 @@ function openNotes(meetingId) {
 closeNotesModal.addEventListener("click", () => (notesModal.style.display = "none"));
 window.addEventListener("click", e => { if (e.target === notesModal) notesModal.style.display = "none"; });
 
-notesTextarea.addEventListener("input", () => {
+notesTextarea.addEventListener("input", async () => {
   if (activeMeetingId !== null) {
-    meetings = meetings.map(m =>
-      m.id === activeMeetingId ? { ...m, notes: notesTextarea.value } : m
-    );
-    saveMeetings();
+    const m = meetings.find(meeting => meeting.id == activeMeetingId);
+    if (m) {
+      m.notes = notesTextarea.value;
+      await updateMeetingInFirestore(m);
+    }
   }
 });
 
@@ -190,43 +203,67 @@ function matchSearch(m, text) {
   );
 }
 
-/* ---------- Firestore Sync (v11 compatible) ---------- */
-
-// Save to Firestore
+/* ---------- Firestore Sync (persistent + no wiping) ---------- */
 async function saveMeetings() {
   try {
-    const { collection, getDocs, addDoc, deleteDoc } = window.firestoreFns;
-    const colRef = collection(db, "meetings");
+    const { collection, setDoc, doc } = window.firestoreFns;
 
-    // Clear current docs to prevent duplicates
-    const snap = await getDocs(colRef);
-    for (const docSnap of snap.docs) {
-      await deleteDoc(docSnap.ref);
-    }
-
-    // Re-upload all meetings
     for (const m of meetings) {
-      await addDoc(colRef, m);
+      // Generate or reuse a readable document ID
+      if (!m.docId) {
+        if (m.attendees && m.attendees.length > 0) {
+          const firstAttendee = m.attendees[0];
+          const firstName = firstAttendee.split(" ")[0].replace(/[^a-zA-Z]/g, "");
+          m.docId = `${firstName}_${m.id || Date.now()}`;
+        } else {
+          m.docId = "Meeting_" + (m.id || Date.now());
+        }
+      }
+
+      // Write or overwrite this document only
+      await setDoc(doc(db, "meetings", m.docId), m);
     }
 
-    console.log("✅ Meetings saved to Firestore");
+    console.log("✅ Meetings saved to Firestore without wiping existing ones");
   } catch (err) {
     console.error("❌ Error saving to Firestore:", err);
   }
 }
 
-// Load from Firestore
+/* ---------- Update a Single Meeting ---------- */
+async function updateMeetingInFirestore(meeting) {
+  try {
+    const { doc, setDoc } = window.firestoreFns;
+    if (!meeting.docId) {
+      console.warn("⚠️ Missing Firestore docId. Generating new ID...");
+      if (meeting.attendees && meeting.attendees.length > 0) {
+        const firstName = meeting.attendees[0].split(" ")[0].replace(/[^a-zA-Z]/g, "");
+        meeting.docId = `${firstName}_${meeting.id || Date.now()}`;
+      } else {
+        meeting.docId = "Meeting_" + (meeting.id || Date.now());
+      }
+    }
+    await setDoc(doc(db, "meetings", meeting.docId), meeting);
+    console.log(`🔄 Updated Firestore doc: ${meeting.docId}`);
+  } catch (err) {
+    console.error("❌ Error updating meeting:", err);
+  }
+}
+
+
+/* ---------- Live Load from Firestore ---------- */
 function loadMeetings() {
   const { collection, onSnapshot } = window.firestoreFns;
   const colRef = collection(db, "meetings");
 
   onSnapshot(colRef, (snapshot) => {
-    meetings = snapshot.docs.map(doc => doc.data());
+    meetings = snapshot.docs.map(doc => ({
+      docId: doc.id,
+      ...doc.data(),
+    }));
     renderMeetings();
   });
 }
 
-// Load from Firestore when page opens
+/* ---------- Initialize ---------- */
 loadMeetings();
-
-
