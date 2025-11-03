@@ -63,36 +63,34 @@
     </div>
   </div>
 
-  <!-- Firebase SDK -->
-<script src="https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js"></script>
-<script src="https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js"></script>
+  <!-- ✅ CORRECT FIREBASE IMPORTS -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
+    import { 
+      getFirestore, collection, getDocs, setDoc, doc, onSnapshot, addDoc, deleteDoc 
+    } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
 
-<script type="module">
-  // Import the Firebase functions
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
-  import { getFirestore, collection, getDocs, setDoc, doc, onSnapshot, addDoc, deleteDoc } 
-    from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
+    // Firebase configuration
+    const firebaseConfig = {
+      apiKey: "AIzaSyCx_ipfBxqITtvjMsSdKR3xJp484CfM",
+      authDomain: "qree-meetings.firebaseapp.com",
+      projectId: "qree-meetings",
+      storageBucket: "qree-meetings.firebasestorage.app",
+      messagingSenderId: "594363951025",
+      appId: "1:594363951025:web:edcf8d4ad0c00ba5a5ff90",
+      measurementId: "G-4FLBR86CLG"
+    };
 
-  // Your Firebase configuration
-  const firebaseConfig = {
-    apiKey: "AIzaSyCx_ipfBxqITtvjMsSdKR3xJp484CfM",
-    authDomain: "qree-meetings.firebaseapp.com",
-    projectId: "qree-meetings",
-    storageBucket: "qree-meetings.firebasestorage.app",
-    messagingSenderId: "594363951025",
-    appId: "1:594363951025:web:edcf8d4ad0c00ba5a5ff90",
-    measurementId: "G-4FLBR86CLG"
-  };
+    // Initialize Firebase
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
 
-  // Initialize Firebase and Firestore
-  const app = initializeApp(firebaseConfig);
-  const db = getFirestore(app);
+    // Expose Firestore to global window for script.js
+    window.db = db;
+    window.firestoreFns = { collection, getDocs, setDoc, doc, onSnapshot, addDoc, deleteDoc };
+  </script>
 
-  // Expose Firestore so script.js can access it
-  window.db = db;
-  window.firestoreFns = { collection, getDocs, setDoc, doc, onSnapshot, addDoc, deleteDoc };
-</script>
-
-  <script src="script.js"></script>
+  <!-- Your main logic (must be last) -->
+  <script src="script.js" defer></script>
 </body>
 </html>
